@@ -87,11 +87,7 @@ struct ContentView: View {
         .frame(width: 420)
         .background(.ultraThinMaterial)
         .onAppear {
-            store.startMonitoring()
             Task { await UpdateChecker.shared.checkForUpdates() }
-        }
-        .onDisappear {
-            store.stopMonitoring()
         }
     }
 
@@ -245,19 +241,34 @@ struct ContentView: View {
                     groupHeader(group)
                 }
 
-                ForEach(group.ports) { port in
-                    PortRowView(
-                        port: port,
-                        availableGroups: availableGroups,
-                        onKill: {
-                            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                                store.requestKill(port)
-                            }
-                        },
-                        onSetLabel: { label in store.setLabel(label, for: port) },
-                        onAssignGroup: { group in store.assignToGroup(port, group: group) },
-                        onRemoveFromGroup: { store.removeFromGroup(port) }
-                    )
+                ForEach(mergedEntries(for: group.ports), id: \.id) { entry in
+                    if entry.ports.count == 1, let port = entry.ports.first {
+                        PortRowView(
+                            port: port,
+                            availableGroups: availableGroups,
+                            onKill: {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                    store.requestKill(port)
+                                }
+                            },
+                            onSetLabel: { label in store.setLabel(label, for: port) },
+                            onAssignGroup: { group in store.assignToGroup(port, group: group) },
+                            onRemoveFromGroup: { store.removeFromGroup(port) }
+                        )
+                    } else {
+                        MultiPortRowView(
+                            entry: entry,
+                            availableGroups: availableGroups,
+                            onKill: { port in
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                    store.requestKill(port)
+                                }
+                            },
+                            onSetLabel: { label, port in store.setLabel(label, for: port) },
+                            onAssignGroup: { group, port in store.assignToGroup(port, group: group) },
+                            onRemoveFromGroup: { port in store.removeFromGroup(port) }
+                        )
+                    }
                 }
             }
         }
@@ -392,6 +403,24 @@ struct ContentView: View {
             .background(Theme.emerald.opacity(0.08))
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Merged Entries
+
+    private func mergedEntries(for ports: [PortInfo]) -> [MergedEntry] {
+        var seen: [String: [PortInfo]] = [:]
+        var order: [String] = []
+        for port in ports {
+            let key = port.displayName
+            if seen[key] == nil {
+                order.append(key)
+            }
+            seen[key, default: []].append(port)
+        }
+        return order.compactMap { key in
+            guard let group = seen[key] else { return nil }
+            return MergedEntry(ports: group.sorted { $0.port < $1.port })
+        }
     }
 
     // MARK: - Actions

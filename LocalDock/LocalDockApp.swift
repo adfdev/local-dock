@@ -2,7 +2,13 @@ import SwiftUI
 
 @main
 struct LocalDockApp: App {
-    @State private var store = PortStore()
+    @State private var store: PortStore
+
+    init() {
+        let s = PortStore()
+        _store = State(initialValue: s)
+        s.startMonitoring()
+    }
 
     var body: some Scene {
         MenuBarExtra {
