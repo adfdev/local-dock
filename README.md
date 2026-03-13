@@ -68,7 +68,7 @@ Build and run with Xcode 15+ (macOS 14+ required).
 
 ## Troubleshooting
 
-### "LocalDock.app è danneggiato e non può essere aperto"
+### "LocalDock.app is damaged and can't be opened"
 
 This is a macOS Gatekeeper warning that appears because the app is not signed with an Apple Developer certificate. To fix it, open Terminal and run:
 
