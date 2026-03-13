@@ -66,6 +66,20 @@ Build and run with Xcode 15+ (macOS 14+ required).
 - `git` subprocess for repo/branch detection
 - No third-party dependencies
 
+## Troubleshooting
+
+### "LocalDock.app è danneggiato e non può essere aperto"
+
+This is a macOS Gatekeeper warning that appears because the app is not signed with an Apple Developer certificate. To fix it, open Terminal and run:
+
+```bash
+xattr -cr /Applications/LocalDock.app
+```
+
+> If you installed the app in a different folder, replace `/Applications/LocalDock.app` with the correct path.
+
+After running the command, open the app again — it will work normally.
+
 ## License
 
 [MIT](LICENSE) — Made by [@adfdev](https://github.com/adfdev)
