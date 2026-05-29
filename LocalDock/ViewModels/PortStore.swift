@@ -40,23 +40,23 @@ final class PortStore {
         let settings = AppSettings.shared
         let portToGroup = settings.portToGroup
 
-        // 1. Custom groups (ordered)
-        let portsInCustomGroups = filteredPorts.filter { portToGroup[$0.port] != nil }
-
-        // 2. Remaining (ungrouped)
-        let ungrouped = filteredPorts.filter { portToGroup[$0.port] == nil }
-
         var groups: [PortGroup] = []
+        var placedPortIDs = Set<String>()
 
-        // Custom groups in user-defined order
+        // 1. Custom groups in user-defined order
         for groupName in settings.groupOrder {
-            let groupPorts = portsInCustomGroups.filter { portToGroup[$0.port] == groupName }
+            let groupPorts = filteredPorts.filter { portToGroup[$0.port] == groupName }
             if !groupPorts.isEmpty {
                 groups.append(PortGroup(name: groupName, ports: groupPorts))
+                placedPortIDs.formUnion(groupPorts.map(\.id))
             }
         }
 
-        // Ungrouped ports
+        // 2. Anything not placed above (truly ungrouped, OR assigned to a group that is
+        //    missing from groupOrder — which would otherwise vanish while still being
+        //    counted in activePortCount).
+        let ungrouped = filteredPorts.filter { !placedPortIDs.contains($0.id) }
+
         if !ungrouped.isEmpty {
             if settings.groupByProject {
                 let grouped = Dictionary(grouping: ungrouped) { $0.gitRepo ?? "Other" }

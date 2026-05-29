@@ -4,6 +4,7 @@ struct ContentView: View {
     @Bindable var store: PortStore
     @State private var showSettings = false
     @State private var showKillAllConfirmation = false
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -26,17 +27,27 @@ struct ContentView: View {
                         .frame(height: 1)
                 }
 
+                // The ScrollView lives inside a MenuBarExtra(.window). That window sizes
+                // itself to its content, but a ScrollView does NOT propagate its content's
+                // height upward, so the window collapses the scroll area to ~0pt — the list
+                // renders blank even though the data is present (badge stays correct).
+                // Fix: measure the real content height and pin the ScrollView to it.
                 ScrollView {
-                    if let error = store.error {
-                        errorView(error)
-                    } else if store.filteredPorts.isEmpty {
-                        emptyView
-                    } else {
-                        portListView
-                    }
+                    scrollContent
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: ContentHeightKey.self,
+                                    value: proxy.size.height
+                                )
+                            }
+                        )
                 }
-                .frame(maxHeight: 420)
+                .frame(height: min(max(contentHeight, 60), 420))
                 .scrollIndicators(.never)
+                .onPreferenceChange(ContentHeightKey.self) { newHeight in
+                    contentHeight = newHeight
+                }
             }
             .blur(radius: (store.showKillConfirmation || showKillAllConfirmation || showKillGroupConfirmation) ? 2 : 0)
             .allowsHitTesting(!(store.showKillConfirmation || showKillAllConfirmation || showKillGroupConfirmation))
@@ -88,6 +99,23 @@ struct ContentView: View {
         .background(.ultraThinMaterial)
         .onAppear {
             Task { await UpdateChecker.shared.checkForUpdates() }
+        }
+    }
+
+    // MARK: - Scroll Content
+
+    @ViewBuilder
+    private var scrollContent: some View {
+        if let error = store.error {
+            errorView(error)
+        } else if store.filteredPorts.isEmpty {
+            if !store.searchText.isEmpty {
+                noResultsView
+            } else {
+                emptyView
+            }
+        } else {
+            portListView
         }
     }
 
@@ -235,7 +263,11 @@ struct ContentView: View {
     private var portListView: some View {
         let availableGroups = AppSettings.shared.groupOrder
 
-        return LazyVStack(alignment: .leading, spacing: 1) {
+        // NOTE: must be an eager VStack, not LazyVStack. Inside a MenuBarExtra(.window)
+        // popover a LazyVStack can measure a zero-height viewport on re-presentation and
+        // build no rows, leaving the list blank while the menu-bar badge still shows the
+        // correct count.
+        return VStack(alignment: .leading, spacing: 1) {
             ForEach(store.groupedPorts) { group in
                 if store.groupedPorts.count > 1 {
                     groupHeader(group)
@@ -343,6 +375,48 @@ struct ContentView: View {
         .padding(.vertical, 48)
     }
 
+    // MARK: - No Search Results
+
+    private var noResultsView: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Theme.comment.opacity(0.1))
+                    .frame(width: 64, height: 64)
+
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundStyle(Theme.comment)
+            }
+
+            VStack(spacing: 4) {
+                Text("No matches")
+                    .font(.system(.callout, design: .rounded, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Text("\(store.activePortCount) active, none match \"\(store.searchText)\"")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Theme.comment)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                store.searchText = ""
+            } label: {
+                Text("Clear search")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Theme.accent.opacity(0.15))
+                    .foregroundStyle(Theme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+
     // MARK: - Error
 
     private func errorView(_ message: String) -> some View {
@@ -443,6 +517,13 @@ struct ContentView: View {
             try? await Task.sleep(for: .seconds(1))
             await store.scan()
         }
+    }
+}
+
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
